@@ -30,6 +30,11 @@ enum Command {
         /// The todo number (from `todo list`)
         number: usize,
     },
+    /// Mark a todo as not done
+    Undo {
+        /// The todo number (from `todo list`)
+        number: usize,
+    },
     /// Remove a todo
     Remove {
         /// The todo number (from `todo list`)
@@ -94,6 +99,17 @@ fn main() {
             todos[number - 1].completed = true;
             save_todos(&todos);
             println!("Marked as done: \"{}\"", todos[number - 1].description);
+        }
+
+        Command::Undo { number } => {
+            let mut todos = load_todos();
+            if number == 0 || number > todos.len() {
+                eprintln!("Invalid todo number: {}. Use `todo list` to see valid numbers.", number);
+                std::process::exit(1);
+            }
+            todos[number - 1].completed = false;
+            save_todos(&todos);
+            println!("Marked as not done: \"{}\"", todos[number - 1].description);
         }
 
         Command::Remove { number } => {

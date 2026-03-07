@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-const TODO_FILE: &str = "todos.json";
-
 #[derive(Serialize, Deserialize)]
 struct Todo {
     description: String,
@@ -40,7 +38,9 @@ enum Command {
 }
 
 fn todo_path() -> PathBuf {
-    PathBuf::from(TODO_FILE)
+    let mut path = dirs::home_dir().expect("Could not find home directory");
+    path.push(".todos.json");
+    path
 }
 
 fn load_todos() -> Vec<Todo> {

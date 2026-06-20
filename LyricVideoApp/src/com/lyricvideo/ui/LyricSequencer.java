@@ -19,8 +19,8 @@ public class LyricSequencer {
 
     private final List<LyricLine> lyrics;
 
-    private JLabel           lyricLabel;
-    private volatile CountDownLatch latch; // counts down when OK is clicked
+    private JLabel lyricLabel;
+    private volatile CountDownLatch latch;
 
     public LyricSequencer(List<LyricLine> lyrics) {
         this.lyrics = lyrics;
@@ -34,7 +34,6 @@ public class LyricSequencer {
 
     private void runSequence() {
         try {
-            // Build the dialog once on the EDT, then keep it open
             SwingUtilities.invokeAndWait(this::createDialog);
 
             for (LyricLine line : lyrics) {
@@ -51,7 +50,6 @@ public class LyricSequencer {
         }
     }
 
-    /** Creates the dialog once. OK button counts down the current latch instead of closing. */
     private void createDialog() {
         lyricLabel = new JLabel("", SwingConstants.CENTER);
         lyricLabel.setFont(new Font("Dialog", Font.BOLD, FULL_LINE_FONT));
@@ -67,25 +65,24 @@ public class LyricSequencer {
 
         JPanel content = new JPanel(new BorderLayout(10, 10));
         content.setBorder(BorderFactory.createEmptyBorder(15, 15, 10, 15));
-        content.add(lyricLabel,   BorderLayout.CENTER);
-        content.add(buttonPanel,  BorderLayout.SOUTH);
+        content.add(lyricLabel,  BorderLayout.CENTER);
+        content.add(buttonPanel, BorderLayout.SOUTH);
 
         JDialog dialog = new JDialog((Frame) null, "Nude", false);
         dialog.setContentPane(content);
         dialog.setMinimumSize(new Dimension(300, 120));
-        dialog.setAlwaysOnTop(true); // stays on top of the code editor
+        dialog.setAlwaysOnTop(true);
         dialog.pack();
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
 
-    /** Updates the label text, then blocks the background thread until OK is clicked. */
     private void showLyric(String text, int fontSize) throws InterruptedException {
         latch = new CountDownLatch(1);
         SwingUtilities.invokeLater(() -> {
             lyricLabel.setFont(new Font("Dialog", Font.BOLD, fontSize));
             lyricLabel.setText("<html><center>" + text + "</center></html>");
         });
-        latch.await(); // wait here until OK is clicked
+        latch.await();
     }
 }

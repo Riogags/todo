@@ -16,6 +16,9 @@ import java.util.List;
  */
 public class LyricConfig {
 
+    /** ← Change this to whatever you want the popup title to say */
+    public static final String TITLE = "Nude";
+
     public static List<LyricLine> getLyrics() {
         return Arrays.asList(
 

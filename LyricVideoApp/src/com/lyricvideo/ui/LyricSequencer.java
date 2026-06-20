@@ -68,7 +68,7 @@ public class LyricSequencer {
         content.add(lyricLabel,  BorderLayout.CENTER);
         content.add(buttonPanel, BorderLayout.SOUTH);
 
-        JDialog dialog = new JDialog((Frame) null, "Nude", false);
+        JDialog dialog = new JDialog((Frame) null, com.lyricvideo.config.LyricConfig.TITLE, false);
         dialog.setContentPane(content);
         dialog.setMinimumSize(new Dimension(300, 120));
         dialog.setAlwaysOnTop(true);

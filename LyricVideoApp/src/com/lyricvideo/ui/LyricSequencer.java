@@ -72,6 +72,7 @@ public class LyricSequencer {
         dialog.setContentPane(content);
         dialog.setMinimumSize(new Dimension(300, 120));
         dialog.setAlwaysOnTop(true);
+        dialog.getRootPane().setDefaultButton(okButton);
         dialog.pack();
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);

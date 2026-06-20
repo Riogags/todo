@@ -7,23 +7,21 @@ import java.awt.*;
 import java.util.List;
 
 /**
- * LyricSequencer — shows one popup at a time and waits for the user
- * to click OK before advancing to the next lyric.
+ * Shows one popup at a time. Click OK to advance to the next lyric.
+ * Passing null to JOptionPane centres the dialog on screen without
+ * any owner window behind it.
  */
 public class LyricSequencer {
 
     private static final int FULL_LINE_FONT = 16;
     private static final int WORD_FONT      = 20;
 
-    private final Frame           owner;
     private final List<LyricLine> lyrics;
 
-    public LyricSequencer(Frame owner, List<LyricLine> lyrics) {
-        this.owner  = owner;
+    public LyricSequencer(List<LyricLine> lyrics) {
         this.lyrics = lyrics;
     }
 
-    /** Start the sequence on the EDT. Each modal popup blocks until OK is clicked. */
     public void start() {
         SwingUtilities.invokeLater(this::runSequence);
     }
@@ -43,6 +41,7 @@ public class LyricSequencer {
     private void showPopup(String text, int fontSize) {
         JLabel message = new JLabel("<html>" + text + "</html>");
         message.setFont(new Font("Dialog", Font.PLAIN, fontSize));
-        JOptionPane.showMessageDialog(owner, message, "Nude", JOptionPane.INFORMATION_MESSAGE);
+        // null owner = no background window, dialog floats on screen by itself
+        JOptionPane.showMessageDialog(null, message, "Nude", JOptionPane.INFORMATION_MESSAGE);
     }
 }

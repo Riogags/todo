@@ -4,12 +4,13 @@ import com.lyricvideo.model.LyricLine;
 
 import javax.swing.*;
 import java.awt.*;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 /**
- * Shows one popup at a time. Click OK to advance to the next lyric.
- * Passing null to JOptionPane centres the dialog on screen without
- * any owner window behind it.
+ * Shows a single persistent dialog. The text updates in place each time
+ * OK is clicked — the dialog never closes between lyrics.
  */
 public class LyricSequencer {
 
@@ -18,30 +19,73 @@ public class LyricSequencer {
 
     private final List<LyricLine> lyrics;
 
+    private JLabel           lyricLabel;
+    private volatile CountDownLatch latch; // counts down when OK is clicked
+
     public LyricSequencer(List<LyricLine> lyrics) {
         this.lyrics = lyrics;
     }
 
     public void start() {
-        SwingUtilities.invokeLater(this::runSequence);
+        Thread t = new Thread(this::runSequence, "LyricSequencer");
+        t.setDaemon(true);
+        t.start();
     }
 
     private void runSequence() {
-        for (LyricLine line : lyrics) {
-            if (line.isWordByWord()) {
-                for (String word : line.getText().trim().split("\\s+")) {
-                    showPopup(word, WORD_FONT);
+        try {
+            // Build the dialog once on the EDT, then keep it open
+            SwingUtilities.invokeAndWait(this::createDialog);
+
+            for (LyricLine line : lyrics) {
+                if (line.isWordByWord()) {
+                    for (String word : line.getText().trim().split("\\s+")) {
+                        showLyric(word, WORD_FONT);
+                    }
+                } else {
+                    showLyric(line.getText(), FULL_LINE_FONT);
                 }
-            } else {
-                showPopup(line.getText(), FULL_LINE_FONT);
             }
+        } catch (InterruptedException | InvocationTargetException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
-    private void showPopup(String text, int fontSize) {
-        JLabel message = new JLabel("<html>" + text + "</html>");
-        message.setFont(new Font("Dialog", Font.PLAIN, fontSize));
-        // null owner = no background window, dialog floats on screen by itself
-        JOptionPane.showMessageDialog(null, message, "Nude", JOptionPane.INFORMATION_MESSAGE);
+    /** Creates the dialog once. OK button counts down the current latch instead of closing. */
+    private void createDialog() {
+        lyricLabel = new JLabel("", SwingConstants.CENTER);
+        lyricLabel.setFont(new Font("Dialog", Font.BOLD, FULL_LINE_FONT));
+        lyricLabel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+
+        JButton okButton = new JButton("OK");
+        okButton.addActionListener(e -> {
+            if (latch != null) latch.countDown();
+        });
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(okButton);
+
+        JPanel content = new JPanel(new BorderLayout(10, 10));
+        content.setBorder(BorderFactory.createEmptyBorder(15, 15, 10, 15));
+        content.add(lyricLabel,   BorderLayout.CENTER);
+        content.add(buttonPanel,  BorderLayout.SOUTH);
+
+        JDialog dialog = new JDialog((Frame) null, "Nude", false);
+        dialog.setContentPane(content);
+        dialog.setMinimumSize(new Dimension(300, 120));
+        dialog.setAlwaysOnTop(true); // stays on top of the code editor
+        dialog.pack();
+        dialog.setLocationRelativeTo(null);
+        dialog.setVisible(true);
+    }
+
+    /** Updates the label text, then blocks the background thread until OK is clicked. */
+    private void showLyric(String text, int fontSize) throws InterruptedException {
+        latch = new CountDownLatch(1);
+        SwingUtilities.invokeLater(() -> {
+            lyricLabel.setFont(new Font("Dialog", Font.BOLD, fontSize));
+            lyricLabel.setText("<html><center>" + text + "</center></html>");
+        });
+        latch.await(); // wait here until OK is clicked
     }
 }

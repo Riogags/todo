@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>PowerPal</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>PowerPal</h1>
+        <p class="tagline">Turning unpredictable power into predictable action.</p>
+      </header>
+
+      <section class="card area-card">
+        <label for="area-input" class="label">Your area</label>
+        <div class="area-row">
+          <input
+            id="area-input"
+            type="text"
+            placeholder="e.g. Yaba, Lagos"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="area-save" class="btn-secondary" type="button">Use</button>
+        </div>
+      </section>
+
+      <section id="status-card" class="card status-card" aria-live="polite">
+        <div class="status-indicator" id="status-indicator">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="status-text">Loading…</span>
+        </div>
+        <p id="status-detail" class="muted"></p>
+      </section>
+
+      <section class="card actions-card">
+        <button id="btn-outage-start" class="btn-primary btn-danger" type="button">
+          Report: Power OFF
+        </button>
+        <button id="btn-power-restored" class="btn-primary btn-success" type="button">
+          Report: Power ON
+        </button>
+      </section>
+
+      <section class="card prediction-card">
+        <div class="card-header">
+          <h2>Prediction</h2>
+          <button id="btn-refresh" class="btn-link" type="button">Refresh</button>
+        </div>
+        <p id="prediction-summary" class="prediction-summary">Loading…</p>
+        <dl class="stats">
+          <div><dt>Confidence</dt><dd id="stat-confidence">—</dd></div>
+          <div><dt>Last 7 days</dt><dd id="stat-outages-7d">—</dd></div>
+          <div><dt>Avg duration</dt><dd id="stat-duration">—</dd></div>
+          <div><dt>Total events</dt><dd id="stat-events">—</dd></div>
+        </dl>
+        <button id="btn-ai-summary" class="btn-secondary" type="button" hidden>
+          Explain with AI
+        </button>
+        <p id="ai-summary" class="ai-summary" hidden></p>
+      </section>
+
+      <section class="card history-card">
+        <h2>Recent events</h2>
+        <ul id="history-list" class="history-list">
+          <li class="muted">No events yet.</li>
+        </ul>
+      </section>
+
+      <footer class="app-footer">
+        <p class="muted">
+          PowerPal MVP — crowd-sourced outage data, simple statistics, and
+          optional AI explanations.
+        </p>
+      </footer>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

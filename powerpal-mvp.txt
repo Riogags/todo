@@ -1,0 +1,1349 @@
+===============================================================================
+PowerPal MVP v0.1 — Source Bundle
+Generated:  2026-04-14T10:01:01Z
+Repo:       Riogags/todo
+Branch:     claude/code-review-feedback-A0tUJ
+Commit:     e6a9b34
+
+HOW TO RUN
+  1. Recreate the directory structure below.
+  2. npm install
+  3. npm start
+  4. Open http://localhost:3000
+
+OPTIONAL: export ANTHROPIC_API_KEY=sk-ant-... to enable AI summaries.
+
+FILE LIST (in bundle order)
+  README.md
+  package.json
+  .gitignore
+  docs/powerpal.md
+  src/server.js
+  src/db.js
+  src/predict.js
+  src/claude.js
+  public/index.html
+  public/styles.css
+  public/app.js
+===============================================================================
+
+
+===============================================================================
+=== FILE: README.md
+===============================================================================
+# PowerPal
+
+Crowd-sourced outage logging with timely "charge now" alerts.
+
+> **MVP, hackathon scope.** See [`docs/powerpal.md`](docs/powerpal.md) for the full concept.
+
+## What this is
+
+A small Node + Express + SQLite app with a mobile-first web UI. Users log
+outages with one tap; a per-area statistical model computes the next likely
+outage window and typical duration. Claude (optional) generates a friendly
+natural-language summary when an `ANTHROPIC_API_KEY` is configured.
+
+## Quick start
+
+```bash
+npm install
+npm start
+# -> http://localhost:3000
+```
+
+Set a port or DB path via environment variables if needed:
+
+```bash
+PORT=4000 POWERPAL_DB_PATH=./data/powerpal.db npm start
+```
+
+### Optional: AI summaries
+
+Export an Anthropic API key before starting the server:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+npm start
+```
+
+The frontend auto-enables the "Explain with AI" button when AI is available.
+
+## API
+
+All endpoints return JSON.
+
+| Method | Path                                    | Purpose                                |
+| ------ | --------------------------------------- | -------------------------------------- |
+| GET    | `/api/health`                           | Server status + AI availability flag   |
+| GET    | `/api/areas`                            | List areas that have any events        |
+| POST   | `/api/events`                           | Log an event (see schema below)        |
+| GET    | `/api/areas/:area/events?limit=N`       | Recent events for an area              |
+| GET    | `/api/areas/:area/status`               | Is power currently on or off?          |
+| GET    | `/api/areas/:area/prediction`           | Stats + next likely outage             |
+| GET    | `/api/areas/:area/ai-summary`           | Claude-generated explanation (opt-in)  |
+
+### Event schema
+
+```json
+{
+  "area": "Yaba, Lagos",
+  "type": "outage_start",      // or "power_restored"
+  "ts": 1733328000000,         // optional; defaults to server time
+  "reporter": "anon-1234"      // optional; arbitrary string <=64 chars
+}
+```
+
+## Project layout
+
+```
+src/
+  server.js     Express routes
+  db.js         SQLite schema + queries
+  predict.js    Pair events into outages; compute histograms & forecast
+  claude.js     Optional Anthropic SDK integration
+public/
+  index.html    Mobile-first UI
+  styles.css
+  app.js        Single-file vanilla-JS client
+docs/
+  powerpal.md   Concept doc
+```
+
+## Notes
+
+- The SQLite database lives at `data/powerpal.db` by default and is
+  `.gitignore`d.
+- The prediction is intentionally statistical, not ML. Claude is used only for
+  *explanation*, never for the raw forecast.
+- There is no auth in this MVP. Area names are the only identifier, and events
+  are stored unauthenticated. Treat this as a demo, not production.
+
+
+===============================================================================
+=== FILE: package.json
+===============================================================================
+{
+  "name": "powerpal",
+  "version": "0.1.0",
+  "description": "PowerPal — crowd-sourced outage logging with 'charge now' alerts.",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "better-sqlite3": "^11.5.0",
+    "express": "^4.21.1"
+  }
+}
+
+
+===============================================================================
+=== FILE: .gitignore
+===============================================================================
+node_modules/
+data/
+*.log
+.env
+.DS_Store
+
+
+===============================================================================
+=== FILE: docs/powerpal.md
+===============================================================================
+# PowerPal — Turning Unpredictable Power Into Predictable Action
+
+**Hackathon MVP concept**
+
+---
+
+## 1. The Problem
+
+It's 6pm. Your phone is at 8%, dinner is half-cooked, and you have no idea when the next outage starts — or how long it will last. For millions of people on unreliable grids, this is every day.
+
+Two overlapping problems drive the pain:
+
+- **Scheduled load shedding** — utility-announced but frequently changed, published in formats that are hard to parse, and often inaccurate at the street level.
+- **Unplanned outages** — faults, overloads, and weather events that nobody warns you about.
+
+The cost is not just inconvenience. People miss work calls, lose refrigerated food, can't study or run small businesses, and waste money on fuel for generators they don't always need.
+
+## 2. The Solution (One Sentence)
+
+**PowerPal turns crowd-reported outage data into timely "charge now" alerts, so users can plan instead of guess.**
+
+## 3. How It Works
+
+Three layers, intentionally simple:
+
+1. **Crowd-sourced outage logs.** Users tap a single button when power goes off and again when it comes back on. Each event is stamped with a timestamp and a coarse area (neighborhood, not precise GPS).
+2. **Statistical prediction per area.** Rolling-window frequency, time-of-day histograms, and typical-duration estimates produce a forecast for each area. No machine learning is needed at MVP — the patterns in load shedding are already statistical in nature.
+3. **Claude as the explanation layer.** The Claude API is used where it shines: generating human-readable summaries ("Based on the last 7 days in your area, expect an outage around 6pm lasting ~2 hours") and answering user questions ("Why am I getting this alert?"). This is cheaper, faster, and more reliable than asking an LLM to predict.
+
+This split is deliberate. It keeps the core prediction loop transparent and debuggable, and it keeps API costs bounded while still giving the product a conversational, intelligent feel.
+
+## 4. Core Features
+
+1. **Outage Logging** — one-tap ON/OFF reporting.
+2. **Area Predictions** — next likely outage window and expected duration.
+3. **Smart Alerts** — "Charge now," "Power restored," "Likely outage in 30 min."
+4. **Area Intelligence Dashboard** — aggregated, anonymized view of reliability in your neighborhood.
+5. **SMS Interaction Mode** — for users on feature phones or during data outages.
+
+## 5. System Architecture
+
+1. **Frontend:** mobile-first web interface (progressive web app for offline-friendly logging).
+2. **Backend:** API server with a database of timestamped events + coarse location.
+3. **Prediction service:** lightweight statistical model running per area, refreshed periodically.
+4. **AI layer:** Claude API for natural-language summaries and user Q&A — **not** the primary prediction engine.
+5. **Notification layer:** push notifications, with SMS as fallback via Twilio or Africa's Talking.
+
+## 6. Data Quality & Privacy
+
+This is where most crowd-sourced products fail. PowerPal takes it seriously from day one.
+
+- **Signal vs. noise.** A single report is a hint, not a truth. An outage is only "confirmed" for an area when it crosses a corroboration threshold (e.g., ≥3 users within a time window). This filters out dead phones and forgotten taps.
+- **Confirmation prompts.** After a suspected outage ends, users are asked "Was the power actually out?" to refine the dataset.
+- **Coarse location only.** Area-level (neighborhood or grid block), never precise GPS. Users choose their area on setup.
+- **Opt-in data sharing.** Aggregation for dashboards is opt-in; individual timestamps are never shown to other users.
+- **Data minimization.** No names, no device IDs tied to public data, no tracking beyond what's needed for predictions.
+
+## 7. Cold-Start Strategy
+
+New products in new areas have no data. PowerPal bootstraps with:
+
+- **Published utility schedules** where they exist (e.g., Eskom load-shedding stages, EKEDC schedules). These seed baseline predictions on day one.
+- **Corroboration thresholds** before publishing predictions to users — if an area has fewer than *N* active reporters, it shows "Not enough data yet" rather than a bad guess.
+- **Ambassador seeding** — partner with a handful of power-user reporters per launch city to bootstrap coverage.
+
+## 8. Business Model
+
+Ordered from strongest to weakest:
+
+1. **B2B partnerships (primary).** Inverter, solar, and battery companies pay for qualified leads in high-outage areas and for anonymized, aggregated demand data. This is the clearest willingness-to-pay.
+2. **Utility and municipal contracts.** Reliability dashboards and customer-communication tooling for utilities that want to understand outage reports from their network.
+3. **Premium consumer features (secondary).** Advanced predictions, appliance-level battery optimization, outage history exports for claims.
+4. **Freemium base.** Free tier with core alerts, to drive the data flywheel.
+
+## 9. Competitive Advantage
+
+1. **Local, not global.** Focused on the grid realities of emerging markets, not a generic utility app.
+2. **Action-based, not data-based.** "Charge now" beats "here's a chart."
+3. **Works in low bandwidth.** SMS mode keeps the product useful exactly when competitors fail — during outages.
+4. **Crowd flywheel.** Each new user improves predictions for everyone in their area.
+
+## 10. Demo Flow
+
+1. User logs an outage.
+2. Event is stored and contributes to the area's dataset.
+3. Prediction service updates the area forecast.
+4. User receives a "Charge now" alert for the next predicted outage window.
+5. As more users in the area log events, predictions sharpen — visibly, within the demo.
+
+## 11. The Pitch
+
+> Every day, millions of people lose a few hours — and a few percent of their phone batteries — to outages nobody warned them about. PowerPal turns unpredictable electricity into predictable action. Instead of guessing, users know when to charge, when to cook, and when to save. One tap creates data. The data creates predictions. The predictions create calm.
+
+
+===============================================================================
+=== FILE: src/server.js
+===============================================================================
+import express from "express";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { insertEvent, recentEvents, eventsSince, lastEvent, listAreas } from "./db.js";
+import { predict, summarize } from "./predict.js";
+import * as claude from "./claude.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = join(__dirname, "..", "public");
+const PORT = Number(process.env.PORT) || 3000;
+const WINDOW_DAYS = 30; // fetch a wider window so predictions see enough history
+
+const app = express();
+app.use(express.json({ limit: "32kb" }));
+app.use(express.static(PUBLIC_DIR));
+
+// --- Areas ---------------------------------------------------------------
+
+app.get("/api/areas", (_req, res) => {
+  res.json({ areas: listAreas() });
+});
+
+// --- Events --------------------------------------------------------------
+
+app.post("/api/events", (req, res) => {
+  const { area, type, ts, reporter } = req.body ?? {};
+  const err = validateEvent({ area, type, ts });
+  if (err) return res.status(400).json({ error: err });
+
+  const event = insertEvent({
+    area: area.trim(),
+    type,
+    ts: ts ?? Date.now(),
+    reporter: reporter ? String(reporter).slice(0, 64) : null,
+  });
+  res.status(201).json({ event });
+});
+
+app.get("/api/areas/:area/events", (req, res) => {
+  const area = req.params.area.trim();
+  const limit = clampInt(req.query.limit, 1, 200, 50);
+  res.json({ area, events: recentEvents(area, limit) });
+});
+
+// --- Status + Prediction -------------------------------------------------
+
+app.get("/api/areas/:area/status", (req, res) => {
+  const area = req.params.area.trim();
+  const last = lastEvent(area);
+  const currentlyOut = last?.type === "outage_start";
+  res.json({
+    area,
+    currentlyOut,
+    lastEvent: last ?? null,
+  });
+});
+
+app.get("/api/areas/:area/prediction", (req, res) => {
+  const area = req.params.area.trim();
+  const since = Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const events = eventsSince(area, since);
+  const prediction = predict(events);
+  res.json({
+    area,
+    prediction,
+    summary: summarize(prediction, area),
+    aiSummaryAvailable: claude.available,
+  });
+});
+
+app.get("/api/areas/:area/ai-summary", async (req, res) => {
+  const area = req.params.area.trim();
+  if (!claude.available) {
+    return res.status(501).json({
+      error: "Claude AI summary is not configured on this server.",
+      hint: "Set ANTHROPIC_API_KEY to enable.",
+    });
+  }
+
+  const since = Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const events = eventsSince(area, since);
+  const prediction = predict(events);
+
+  try {
+    const text = await claude.generateSummary(area, prediction);
+    res.json({ area, prediction, summary: text, source: "claude" });
+  } catch (e) {
+    console.error("[claude] failed:", e.message);
+    res.status(502).json({
+      error: "Upstream AI request failed.",
+      fallbackSummary: summarize(prediction, area),
+    });
+  }
+});
+
+// --- Health --------------------------------------------------------------
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    version: "0.1.0",
+    aiSummaryAvailable: claude.available,
+  });
+});
+
+// --- Validation helpers --------------------------------------------------
+
+const VALID_EVENT_TYPES = new Set(["outage_start", "power_restored"]);
+
+function validateEvent({ area, type, ts }) {
+  if (typeof area !== "string" || area.trim().length === 0) {
+    return "`area` must be a non-empty string.";
+  }
+  if (area.length > 80) return "`area` is too long (max 80 chars).";
+  if (!VALID_EVENT_TYPES.has(type)) {
+    return `\`type\` must be one of: ${[...VALID_EVENT_TYPES].join(", ")}.`;
+  }
+  if (ts != null) {
+    if (typeof ts !== "number" || !Number.isFinite(ts)) {
+      return "`ts` must be a Unix timestamp in milliseconds.";
+    }
+    const now = Date.now();
+    if (ts > now + 60_000) return "`ts` is in the future.";
+    if (ts < now - 365 * 24 * 60 * 60 * 1000) return "`ts` is more than a year old.";
+  }
+  return null;
+}
+
+function clampInt(value, min, max, fallback) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+// --- Start ---------------------------------------------------------------
+
+app.listen(PORT, () => {
+  console.log(`PowerPal listening on http://localhost:${PORT}`);
+  console.log(`  AI summary: ${claude.available ? "enabled" : "disabled (set ANTHROPIC_API_KEY to enable)"}`);
+});
+
+
+===============================================================================
+=== FILE: src/db.js
+===============================================================================
+import Database from "better-sqlite3";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
+const DB_PATH = process.env.POWERPAL_DB_PATH || "data/powerpal.db";
+
+mkdirSync(dirname(DB_PATH), { recursive: true });
+
+export const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    area TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('outage_start', 'power_restored')),
+    ts INTEGER NOT NULL,
+    reporter TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+  );
+  CREATE INDEX IF NOT EXISTS idx_events_area_ts ON events (area, ts DESC);
+`);
+
+const insertEventStmt = db.prepare(
+  "INSERT INTO events (area, type, ts, reporter) VALUES (?, ?, ?, ?)"
+);
+
+export function insertEvent({ area, type, ts, reporter }) {
+  const info = insertEventStmt.run(area, type, ts, reporter ?? null);
+  return { id: info.lastInsertRowid, area, type, ts, reporter: reporter ?? null };
+}
+
+const recentEventsStmt = db.prepare(
+  "SELECT id, area, type, ts, reporter FROM events WHERE area = ? ORDER BY ts DESC LIMIT ?"
+);
+
+export function recentEvents(area, limit = 50) {
+  return recentEventsStmt.all(area, limit);
+}
+
+const eventsSinceStmt = db.prepare(
+  "SELECT id, area, type, ts FROM events WHERE area = ? AND ts >= ? ORDER BY ts ASC"
+);
+
+export function eventsSince(area, sinceMs) {
+  return eventsSinceStmt.all(area, sinceMs);
+}
+
+const lastEventStmt = db.prepare(
+  "SELECT id, area, type, ts FROM events WHERE area = ? ORDER BY ts DESC LIMIT 1"
+);
+
+export function lastEvent(area) {
+  return lastEventStmt.get(area);
+}
+
+const listAreasStmt = db.prepare(
+  "SELECT area, COUNT(*) AS event_count, MAX(ts) AS last_ts FROM events GROUP BY area ORDER BY last_ts DESC"
+);
+
+export function listAreas() {
+  return listAreasStmt.all();
+}
+
+
+===============================================================================
+=== FILE: src/predict.js
+===============================================================================
+// Statistical prediction for PowerPal.
+// Deliberately simple: no ML, no Claude — just pair-up events into outages and
+// compute frequency, time-of-day patterns, and typical duration.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Pair consecutive outage_start / power_restored events into discrete outages.
+ * Skips unpaired events gracefully.
+ */
+export function buildOutages(events) {
+  const sorted = [...events].sort((a, b) => a.ts - b.ts);
+  const outages = [];
+  let openStart = null;
+
+  for (const e of sorted) {
+    if (e.type === "outage_start") {
+      // If there's already an open outage, close it at this start (data gap).
+      if (openStart) {
+        outages.push({ start: openStart.ts, end: e.ts, closed: false });
+      }
+      openStart = e;
+    } else if (e.type === "power_restored" && openStart) {
+      outages.push({ start: openStart.ts, end: e.ts, closed: true });
+      openStart = null;
+    }
+  }
+
+  return { outages, currentlyOut: openStart ? { since: openStart.ts } : null };
+}
+
+/**
+ * Build a histogram of outage start hours (0..23).
+ */
+function hourHistogram(outages) {
+  const hist = new Array(24).fill(0);
+  for (const o of outages) {
+    const h = new Date(o.start).getHours();
+    hist[h] += 1;
+  }
+  return hist;
+}
+
+/**
+ * Pick the top N hours by frequency, with ties broken by later hour
+ * (later-in-day outages are usually more user-relevant).
+ */
+function topHours(hist, n = 3) {
+  return hist
+    .map((count, hour) => ({ hour, count }))
+    .filter((h) => h.count > 0)
+    .sort((a, b) => (b.count - a.count) || (b.hour - a.hour))
+    .slice(0, n);
+}
+
+function average(nums) {
+  if (nums.length === 0) return 0;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+/**
+ * Compute stats + a prediction for an area given raw events.
+ * Returns null-ish fields when there isn't enough data.
+ */
+export function predict(events, { now = Date.now(), windowDays = 14 } = {}) {
+  const since = now - windowDays * DAY_MS;
+  const recent = events.filter((e) => e.ts >= since);
+  const { outages, currentlyOut } = buildOutages(recent);
+
+  const closed = outages.filter((o) => o.closed);
+  const durationsMs = closed.map((o) => o.end - o.start);
+  const avgDurationMs = average(durationsMs);
+
+  const last7dCutoff = now - 7 * DAY_MS;
+  const outagesLast7d = outages.filter((o) => o.start >= last7dCutoff).length;
+  const outagesPerDay = outagesLast7d / 7;
+
+  const hist = hourHistogram(outages);
+  const top = topHours(hist, 3);
+
+  // Prediction: find the next hour-of-day in `top` after `now`.
+  let nextWindow = null;
+  if (top.length > 0) {
+    const nowDate = new Date(now);
+    const nowHour = nowDate.getHours();
+    // Look up to 48 hours ahead to find the nearest top-frequency hour.
+    let best = null;
+    for (let offset = 0; offset < 48; offset++) {
+      const candidateHour = (nowHour + offset) % 24;
+      const match = top.find((t) => t.hour === candidateHour);
+      if (match) {
+        const target = new Date(nowDate);
+        target.setHours(target.getHours() + offset, 0, 0, 0);
+        // If we're already past the target hour today, push to that hour on a future day.
+        if (target.getTime() <= now) {
+          target.setDate(target.getDate() + 1);
+        }
+        best = {
+          ts: target.getTime(),
+          hour: candidateHour,
+          confidence: match.count / outages.length,
+        };
+        break;
+      }
+    }
+    nextWindow = best;
+  }
+
+  const confidence =
+    outages.length === 0
+      ? "none"
+      : outages.length < 3
+      ? "low"
+      : outages.length < 10
+      ? "medium"
+      : "high";
+
+  return {
+    now,
+    windowDays,
+    eventCount: recent.length,
+    outageCount: outages.length,
+    outagesLast7d,
+    outagesPerDay: round(outagesPerDay, 2),
+    avgDurationMinutes: closed.length ? Math.round(avgDurationMs / 60000) : null,
+    topHours: top,
+    nextLikelyOutage: nextWindow,
+    expectedDurationMinutes:
+      closed.length && avgDurationMs > 0 ? Math.round(avgDurationMs / 60000) : null,
+    currentlyOut: currentlyOut
+      ? {
+          since: currentlyOut.since,
+          durationMinutes: Math.round((now - currentlyOut.since) / 60000),
+        }
+      : null,
+    confidence,
+  };
+}
+
+function round(n, digits) {
+  const f = 10 ** digits;
+  return Math.round(n * f) / f;
+}
+
+/**
+ * Rule-based natural-language summary. Used as the fallback when Claude is
+ * unavailable or disabled.
+ */
+export function summarize(prediction, area) {
+  const lines = [];
+  if (prediction.eventCount === 0) {
+    return `No data yet for ${area}. Log a few outages to start seeing predictions.`;
+  }
+
+  if (prediction.currentlyOut) {
+    lines.push(
+      `Power is currently OFF in ${area} (for ~${prediction.currentlyOut.durationMinutes} min).`
+    );
+  } else {
+    lines.push(`Power is currently ON in ${area}.`);
+  }
+
+  if (prediction.outagesLast7d > 0) {
+    lines.push(
+      `${prediction.outagesLast7d} outage${prediction.outagesLast7d === 1 ? "" : "s"} in the last 7 days (~${prediction.outagesPerDay}/day).`
+    );
+  }
+
+  if (prediction.nextLikelyOutage) {
+    const t = new Date(prediction.nextLikelyOutage.ts);
+    const timeLabel = t.toLocaleString(undefined, {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const dur = prediction.expectedDurationMinutes
+      ? ` lasting ~${prediction.expectedDurationMinutes} min`
+      : "";
+    lines.push(`Next likely outage: ${timeLabel}${dur} (confidence: ${prediction.confidence}).`);
+  }
+
+  return lines.join(" ");
+}
+
+
+===============================================================================
+=== FILE: src/claude.js
+===============================================================================
+// Optional Claude integration. If ANTHROPIC_API_KEY is unset, `available` is
+// false and the server falls back to the rule-based summary from predict.js.
+
+import Anthropic from "@anthropic-ai/sdk";
+
+const apiKey = process.env.ANTHROPIC_API_KEY;
+const MODEL = process.env.POWERPAL_MODEL || "claude-haiku-4-5-20251001";
+
+export const available = Boolean(apiKey);
+
+const client = available ? new Anthropic({ apiKey }) : null;
+
+/**
+ * Generate a concise, user-facing summary + action recommendation for a given
+ * area's prediction. Kept small and cheap — Haiku by default.
+ */
+export async function generateSummary(area, prediction) {
+  if (!available) {
+    throw new Error("Claude is not configured (ANTHROPIC_API_KEY unset).");
+  }
+
+  const system = [
+    "You are PowerPal, an assistant that helps people plan around unreliable electricity.",
+    "You receive structured stats about a user's area and must return a SHORT, friendly summary",
+    "(2-3 sentences max) followed by ONE concrete action recommendation starting with 'Action:'.",
+    "Be specific about times if provided. Never invent data. If confidence is 'none' or 'low',",
+    "say so plainly.",
+  ].join(" ");
+
+  const user = JSON.stringify({ area, prediction }, null, 2);
+
+  const resp = await client.messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+
+  const text = resp.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+
+  return text;
+}
+
+
+===============================================================================
+=== FILE: public/index.html
+===============================================================================
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>PowerPal</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>PowerPal</h1>
+        <p class="tagline">Turning unpredictable power into predictable action.</p>
+      </header>
+
+      <section class="card area-card">
+        <label for="area-input" class="label">Your area</label>
+        <div class="area-row">
+          <input
+            id="area-input"
+            type="text"
+            placeholder="e.g. Yaba, Lagos"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="area-save" class="btn-secondary" type="button">Use</button>
+        </div>
+      </section>
+
+      <section id="status-card" class="card status-card" aria-live="polite">
+        <div class="status-indicator" id="status-indicator">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="status-text">Loading…</span>
+        </div>
+        <p id="status-detail" class="muted"></p>
+      </section>
+
+      <section class="card actions-card">
+        <button id="btn-outage-start" class="btn-primary btn-danger" type="button">
+          Report: Power OFF
+        </button>
+        <button id="btn-power-restored" class="btn-primary btn-success" type="button">
+          Report: Power ON
+        </button>
+      </section>
+
+      <section class="card prediction-card">
+        <div class="card-header">
+          <h2>Prediction</h2>
+          <button id="btn-refresh" class="btn-link" type="button">Refresh</button>
+        </div>
+        <p id="prediction-summary" class="prediction-summary">Loading…</p>
+        <dl class="stats">
+          <div><dt>Confidence</dt><dd id="stat-confidence">—</dd></div>
+          <div><dt>Last 7 days</dt><dd id="stat-outages-7d">—</dd></div>
+          <div><dt>Avg duration</dt><dd id="stat-duration">—</dd></div>
+          <div><dt>Total events</dt><dd id="stat-events">—</dd></div>
+        </dl>
+        <button id="btn-ai-summary" class="btn-secondary" type="button" hidden>
+          Explain with AI
+        </button>
+        <p id="ai-summary" class="ai-summary" hidden></p>
+      </section>
+
+      <section class="card history-card">
+        <h2>Recent events</h2>
+        <ul id="history-list" class="history-list">
+          <li class="muted">No events yet.</li>
+        </ul>
+      </section>
+
+      <footer class="app-footer">
+        <p class="muted">
+          PowerPal MVP — crowd-sourced outage data, simple statistics, and
+          optional AI explanations.
+        </p>
+      </footer>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
+
+
+===============================================================================
+=== FILE: public/styles.css
+===============================================================================
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #273449;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --primary: #38bdf8;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --border: #334155;
+  --radius: 12px;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.area-row {
+  display: flex;
+  gap: 8px;
+}
+
+input[type="text"] {
+  flex: 1;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input[type="text"]:focus {
+  border-color: var(--primary);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--text);
+  transition: transform 0.05s, opacity 0.15s;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  width: 100%;
+  font-size: 17px;
+  padding: 16px;
+  margin-bottom: 10px;
+}
+
+.btn-primary:last-child {
+  margin-bottom: 0;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+}
+
+.btn-success {
+  background: var(--success);
+  color: white;
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-link {
+  background: transparent;
+  color: var(--primary);
+  padding: 4px 8px;
+  font-size: 14px;
+}
+
+.status-card {
+  text-align: center;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 0 rgba(148, 163, 184, 0.4);
+}
+
+.status-card[data-status="on"] .dot {
+  background: var(--success);
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.15);
+}
+
+.status-card[data-status="off"] .dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.2);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.05);
+  }
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 6px 0 0;
+}
+
+.prediction-summary {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.stats > div {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.stats dt {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 2px;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ai-summary {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--primary);
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.history-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 14px;
+}
+
+.history-list li .type-outage_start {
+  color: var(--danger);
+}
+
+.history-list li .type-power_restored {
+  color: var(--success);
+}
+
+.history-list li time {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.app-footer {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: var(--shadow);
+  max-width: min(90vw, 360px);
+  text-align: center;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.error {
+  border-color: var(--danger);
+}
+
+
+===============================================================================
+=== FILE: public/app.js
+===============================================================================
+// PowerPal frontend — single-file vanilla JS client.
+
+const AREA_KEY = "powerpal:area";
+
+const els = {
+  areaInput: document.getElementById("area-input"),
+  areaSave: document.getElementById("area-save"),
+  statusCard: document.getElementById("status-card"),
+  statusText: document.getElementById("status-text"),
+  statusDetail: document.getElementById("status-detail"),
+  btnOutageStart: document.getElementById("btn-outage-start"),
+  btnPowerRestored: document.getElementById("btn-power-restored"),
+  btnRefresh: document.getElementById("btn-refresh"),
+  predictionSummary: document.getElementById("prediction-summary"),
+  statConfidence: document.getElementById("stat-confidence"),
+  statOutages7d: document.getElementById("stat-outages-7d"),
+  statDuration: document.getElementById("stat-duration"),
+  statEvents: document.getElementById("stat-events"),
+  btnAiSummary: document.getElementById("btn-ai-summary"),
+  aiSummary: document.getElementById("ai-summary"),
+  historyList: document.getElementById("history-list"),
+  toast: document.getElementById("toast"),
+};
+
+let currentArea = localStorage.getItem(AREA_KEY) || "";
+if (currentArea) els.areaInput.value = currentArea;
+
+function toast(message, { error = false } = {}) {
+  els.toast.textContent = message;
+  els.toast.classList.toggle("error", error);
+  els.toast.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => els.toast.classList.remove("show"), 2800);
+}
+
+async function apiJson(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+async function refreshAll() {
+  if (!currentArea) {
+    els.statusText.textContent = "Set your area to begin";
+    els.statusCard.removeAttribute("data-status");
+    els.predictionSummary.textContent = "Enter an area above to see predictions.";
+    els.historyList.innerHTML = '<li class="muted">No area selected.</li>';
+    setStats({});
+    return;
+  }
+
+  try {
+    await Promise.all([refreshStatus(), refreshPrediction(), refreshHistory()]);
+  } catch (e) {
+    console.error(e);
+    toast(`Failed to load: ${e.message}`, { error: true });
+  }
+}
+
+async function refreshStatus() {
+  const encoded = encodeURIComponent(currentArea);
+  const data = await apiJson("GET", `/api/areas/${encoded}/status`);
+  if (data.currentlyOut) {
+    els.statusCard.setAttribute("data-status", "off");
+    els.statusText.textContent = "Power OFF";
+    const since = data.lastEvent ? new Date(data.lastEvent.ts) : null;
+    els.statusDetail.textContent = since
+      ? `Since ${formatTime(since)}`
+      : "";
+  } else if (data.lastEvent) {
+    els.statusCard.setAttribute("data-status", "on");
+    els.statusText.textContent = "Power ON";
+    const since = new Date(data.lastEvent.ts);
+    els.statusDetail.textContent = `Last change ${formatRelative(since)}`;
+  } else {
+    els.statusCard.removeAttribute("data-status");
+    els.statusText.textContent = "No data yet";
+    els.statusDetail.textContent = "Log an event to begin.";
+  }
+}
+
+async function refreshPrediction() {
+  const encoded = encodeURIComponent(currentArea);
+  const data = await apiJson("GET", `/api/areas/${encoded}/prediction`);
+  const p = data.prediction;
+
+  els.predictionSummary.textContent = data.summary;
+  setStats({
+    confidence: p.confidence,
+    outages7d: p.outagesLast7d,
+    duration: p.avgDurationMinutes,
+    events: p.eventCount,
+  });
+  els.btnAiSummary.hidden = !data.aiSummaryAvailable;
+  els.aiSummary.hidden = true;
+  els.aiSummary.textContent = "";
+}
+
+async function refreshHistory() {
+  const encoded = encodeURIComponent(currentArea);
+  const data = await apiJson("GET", `/api/areas/${encoded}/events?limit=25`);
+  if (data.events.length === 0) {
+    els.historyList.innerHTML = '<li class="muted">No events yet.</li>';
+    return;
+  }
+  els.historyList.innerHTML = data.events
+    .map((e) => {
+      const label = e.type === "outage_start" ? "Power off" : "Power on";
+      return `
+        <li>
+          <span class="type-${e.type}">${label}</span>
+          <time datetime="${new Date(e.ts).toISOString()}">${formatRelative(new Date(e.ts))}</time>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+function setStats({ confidence, outages7d, duration, events }) {
+  els.statConfidence.textContent = confidence ?? "—";
+  els.statOutages7d.textContent = outages7d != null ? String(outages7d) : "—";
+  els.statDuration.textContent = duration != null ? `${duration} min` : "—";
+  els.statEvents.textContent = events != null ? String(events) : "—";
+}
+
+function formatTime(date) {
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function formatRelative(date) {
+  const diffMs = Date.now() - date.getTime();
+  const s = Math.round(diffMs / 1000);
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+async function logEvent(type) {
+  if (!currentArea) {
+    toast("Set your area first", { error: true });
+    els.areaInput.focus();
+    return;
+  }
+  els.btnOutageStart.disabled = true;
+  els.btnPowerRestored.disabled = true;
+  try {
+    await apiJson("POST", "/api/events", { area: currentArea, type });
+    toast(type === "outage_start" ? "Logged: power OFF" : "Logged: power ON");
+    await refreshAll();
+  } catch (e) {
+    toast(`Log failed: ${e.message}`, { error: true });
+  } finally {
+    els.btnOutageStart.disabled = false;
+    els.btnPowerRestored.disabled = false;
+  }
+}
+
+async function loadAiSummary() {
+  if (!currentArea) return;
+  els.btnAiSummary.disabled = true;
+  const originalLabel = els.btnAiSummary.textContent;
+  els.btnAiSummary.textContent = "Thinking…";
+  try {
+    const encoded = encodeURIComponent(currentArea);
+    const data = await apiJson("GET", `/api/areas/${encoded}/ai-summary`);
+    els.aiSummary.hidden = false;
+    els.aiSummary.textContent = data.summary;
+  } catch (e) {
+    toast(`AI summary failed: ${e.message}`, { error: true });
+    if (e.data?.fallbackSummary) {
+      els.aiSummary.hidden = false;
+      els.aiSummary.textContent = e.data.fallbackSummary;
+    }
+  } finally {
+    els.btnAiSummary.disabled = false;
+    els.btnAiSummary.textContent = originalLabel;
+  }
+}
+
+// --- Event wiring --------------------------------------------------------
+
+els.areaSave.addEventListener("click", () => {
+  const value = els.areaInput.value.trim();
+  if (!value) {
+    toast("Enter an area name", { error: true });
+    return;
+  }
+  currentArea = value;
+  localStorage.setItem(AREA_KEY, value);
+  toast(`Area set: ${value}`);
+  refreshAll();
+});
+
+els.areaInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    els.areaSave.click();
+  }
+});
+
+els.btnOutageStart.addEventListener("click", () => logEvent("outage_start"));
+els.btnPowerRestored.addEventListener("click", () => logEvent("power_restored"));
+els.btnRefresh.addEventListener("click", refreshAll);
+els.btnAiSummary.addEventListener("click", loadAiSummary);
+
+// Initial load
+refreshAll();

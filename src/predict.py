@@ -108,9 +108,9 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Irrigation decision from three sensor readings."
     )
-    parser.add_argument("soil_moisture", type=float, help="soil moisture (%)")
+    parser.add_argument("soil_moisture", type=float, help="soil moisture (%%)")
     parser.add_argument("temperature", type=float, help="temperature (°C)")
-    parser.add_argument("air_humidity", type=float, help="air humidity (%)")
+    parser.add_argument("air_humidity", type=float, help="air humidity (%%)")
     parser.add_argument(
         "--safety",
         action="store_true",

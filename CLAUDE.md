@@ -147,4 +147,23 @@ python src/predict.py 52 26 75  # -> No
 python src/generate_water_sunlight_data.py  # (re)create its synthetic dataset
 python src/train_regression.py              # train, evaluate, save regressor
 python src/estimate.py 18 34 30             # -> water_liters_per_m2 + sunlight_hours
+
+# Both models at once (one input -> decision + amounts)
+python src/recommend.py 18 34 30
 ```
+
+### Run both models from one call
+
+`src/recommend.py` is the combined entry point: give it the three sensor values
+once and it runs Model 1 (irrigate Yes/No) and Model 2 (water + sunlight)
+together. The hardware host can use a single function:
+
+```python
+from recommend import recommend
+r = recommend(soil_moisture=18, temperature=34, air_humidity=30)
+# {"irrigate": "Yes", "irrigate_probability": 0.999,
+#  "water_liters_per_m2": 6.67, "sunlight_hours": 6.70}
+```
+
+Both saved models (`model.joblib`, `regressor.joblib`) must exist first — i.e.
+run `train.py` and `train_regression.py` once each.

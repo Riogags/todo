@@ -55,6 +55,21 @@ MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "model.joblib")
 SCALER_PATH = os.path.join(PROJECT_ROOT, "models", "scaler.joblib")
 CONFUSION_MATRIX_PATH = os.path.join(PROJECT_ROOT, "reports", "confusion_matrix.png")
 
+# ---------------------------------------------------------------------------
+# Second model (regression): estimate how much water + sunlight are required
+# ---------------------------------------------------------------------------
+# The irrigate decision above is CLASSIFICATION (Yes/No). Estimating amounts is
+# a different, CONTINUOUS task, so it uses Linear Regression instead. Same three
+# sensor inputs, two numeric outputs:
+#   water_liters_per_m2 : recommended water to apply (litres per m^2 per day)
+#   sunlight_hours      : advisory recommended daily sun-exposure (hours)
+# NOTE: sunlight is advisory (a field can't actuate the sun); reframe as an
+# actuated output if this is a greenhouse with grow-lights.
+REGRESSION_TARGETS = ["water_liters_per_m2", "sunlight_hours"]
+WATER_SUNLIGHT_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "water_sunlight.csv")
+REGRESSOR_PATH = os.path.join(PROJECT_ROOT, "models", "regressor.joblib")
+REGRESSOR_SCALER_PATH = os.path.join(PROJECT_ROOT, "models", "regressor_scaler.joblib")
+
 
 def load_data(path: str = DATA_PATH) -> pd.DataFrame:
     """Load the irrigation dataset from CSV and clean missing values.
@@ -108,3 +123,31 @@ def features_to_array(soil_moisture: float, temperature: float, air_humidity: fl
 def decode_label(value: int) -> str:
     """Turn a 0/1 model output into the 'No'/'Yes' string the hardware reads."""
     return LABELS[int(value)]
+
+
+def load_regression_data(path: str = WATER_SUNLIGHT_DATA_PATH) -> pd.DataFrame:
+    """Load the water/sunlight dataset for the regression model and clean it.
+
+    Same cleaning idea as load_data(): coerce to numeric, impute missing sensor
+    readings with the column median, and drop rows whose target amounts are
+    missing (we can't train on a row with no answer).
+    """
+    df = pd.read_csv(path)
+
+    required = FEATURES + REGRESSION_TARGETS
+    missing_cols = [c for c in required if c not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Dataset at {path} is missing required columns: {missing_cols}. "
+            f"Expected columns: {required}"
+        )
+
+    for col in required:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    for col in FEATURES:
+        if df[col].isna().any():
+            df[col] = df[col].fillna(df[col].median())
+
+    df = df.dropna(subset=REGRESSION_TARGETS)
+    return df

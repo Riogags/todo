@@ -108,12 +108,43 @@ These are the defaults chosen for the open items above. They are easy to revisit
 - **Inference interface:** Exposed as a Python **function call** — `predict(soil_moisture, temperature, air_humidity) -> "Yes"/"No"` in `src/predict.py` — plus a CLI for quick host/serial integration. The hardware team can `from predict import predict` and call it directly.
 - **Threshold logic:** **Model + optional hard safety rule.** By default the decision is model-only. A configurable safety override (`never irrigate when soil_moisture >= SAFETY_MOISTURE_CEILING`) can be enabled so the pump can never fire on already-wet soil regardless of the model.
 
+## Optional second model — water/sunlight estimator (Linear Regression)
+
+A separate, optional model that estimates **continuous amounts** from the same
+three sensor inputs:
+
+- `water_liters_per_m2` — recommended water to apply (litres per m² per day).
+- `sunlight_hours` — **advisory** recommended daily sun-exposure (a field can't
+  actuate the sun; reframe as an actuated output if this is a greenhouse with
+  grow-lights).
+
+This uses `sklearn.linear_model.LinearRegression` (multi-output). That does
+**not** contradict the "no linear regression" rule above: that rule is about the
+`irrigate` target, which is a *category* (classification → Logistic Regression).
+Water/sunlight are *numbers*, so regression is the correct tool. Right tool per
+target.
+
+Files: `src/generate_water_sunlight_data.py`, `src/train_regression.py`,
+`src/estimate.py`. Dataset `data/water_sunlight.csv` is **synthetic** (fixed
+seed) — replace with real agronomy/field measurements and re-run.
+
+> In the synthetic run, water fits well (R² ≈ 0.88) but sunlight fits poorly
+> (R² ≈ 0.48) — expected, because sunlight need is mostly a crop property, not a
+> function of these three sensors.
+
 ## How to run
 
 ```bash
 pip install -r requirements.txt
+
+# Model 1 — irrigate decision (classification)
 python src/generate_data.py     # (re)create the synthetic dataset
 python src/train.py             # train, evaluate, save model + scaler + plot
 python src/predict.py 18 34 30  # -> Yes
 python src/predict.py 52 26 75  # -> No
+
+# Model 2 — water/sunlight estimate (regression, optional)
+python src/generate_water_sunlight_data.py  # (re)create its synthetic dataset
+python src/train_regression.py              # train, evaluate, save regressor
+python src/estimate.py 18 34 30             # -> water_liters_per_m2 + sunlight_hours
 ```

@@ -10,12 +10,16 @@ agronomy/field measurements when you have them and re-run train_regression.py.
 Targets and the physical reasoning behind them
 ----------------------------------------------
 water_liters_per_m2  (litres per m^2 per day):
-  The plant loses more water — so needs more applied — when the soil is dry,
-  the air is hot, and the air is dry:
+  The plant loses more water — so needs more applied — when the soil is dry and
+  the air is hot; soil pH has a small placeholder effect:
     * LOW soil_moisture  -> already dry            -> apply MORE water
     * HIGH temperature   -> more evaporation       -> apply MORE water
-    * LOW air_humidity   -> faster loss to the air -> apply MORE water
+    * LOW pH (acidic)    -> SMALL placeholder      -> apply slightly MORE water
   We clip at 0 (you never apply negative water).
+
+  Note on pH: it is not a strong physical driver of water demand (it is a
+  chemistry property). It is included because the hardware has a pH probe; the
+  small synthetic effect here is a placeholder to be replaced by real data.
 
 sunlight_hours  (recommended daily sun-exposure, hours) — ADVISORY:
   A field cannot switch the sun on, so this is a recommendation, not an
@@ -42,16 +46,16 @@ def generate(n_samples: int = N_SAMPLES, seed: int = RANDOM_STATE) -> pd.DataFra
     # Same plausible sensor ranges as the classification dataset.
     soil_moisture = rng.uniform(5, 95, n_samples)    # %
     temperature = rng.uniform(15, 45, n_samples)     # °C
-    air_humidity = rng.uniform(15, 95, n_samples)    # %
+    ph = rng.uniform(5.0, 8.0, n_samples)            # pH
 
     # --- water_liters_per_m2 -------------------------------------------------
-    # Linear combination matching the physics above (dry/hot/dry-air -> more).
-    # 60 and 50 are "comfortable" reference points; coefficients set the
+    # Linear combination matching the physics above (dry/hot -> more; pH minor).
+    # 60 and 6.5 are "comfortable" reference points; coefficients set the
     # sensitivity. Soil moisture dominates, as in the classification model.
     water = (
         0.10 * (60.0 - soil_moisture)   # drier soil  -> more water
         + 0.15 * (temperature - 20.0)   # hotter      -> more water
-        + 0.05 * (50.0 - air_humidity)  # drier air   -> more water
+        + 0.20 * (6.5 - ph)             # acidic soil -> slightly more (placeholder)
     )
     water = water + rng.normal(0, 0.4, n_samples)     # measurement noise
     water = np.clip(water, 0.0, None)                 # never negative
@@ -61,7 +65,7 @@ def generate(n_samples: int = N_SAMPLES, seed: int = RANDOM_STATE) -> pd.DataFra
     sunlight = (
         6.0
         + 0.05 * (temperature - 25.0)
-        - 0.02 * (air_humidity - 50.0)
+        - 0.10 * (ph - 6.5)
     )
     sunlight = sunlight + rng.normal(0, 0.6, n_samples)
     sunlight = np.clip(sunlight, 2.0, 12.0)
@@ -70,7 +74,7 @@ def generate(n_samples: int = N_SAMPLES, seed: int = RANDOM_STATE) -> pd.DataFra
         {
             "soil_moisture": soil_moisture.round(1),
             "temperature": temperature.round(1),
-            "air_humidity": air_humidity.round(1),
+            "ph": ph.round(2),
             "water_liters_per_m2": water.round(2),
             "sunlight_hours": sunlight.round(2),
         }

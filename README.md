@@ -20,7 +20,7 @@ The system reads **three sensors** and answers **two questions**:
 |----------------|------|---------------------|
 | `soil_moisture` | % | capacitive/resistive soil moisture sensor |
 | `temperature`   | °C | DHT11/DHT22 sensor |
-| `air_humidity`  | % | DHT11/DHT22 sensor (same chip as temperature) |
+| `ph`            | 0–14 (unitless) | dedicated soil pH probe |
 
 From those three numbers, the project runs **two machine-learning models**:
 
@@ -41,20 +41,23 @@ From those three numbers, the project runs **two machine-learning models**:
 
 ## 2. Why these three features?
 
-The hardware team can cheaply measure all three, and each one physically affects
-how fast the soil dries out:
+The hardware team can measure all three:
 
 - **Soil moisture** — the most important feature. It directly tells you how dry
   the soil already is.
 - **Temperature** — hotter air means faster evaporation and transpiration, so
   the plant loses water quicker.
-- **Air humidity** — drier air pulls water out of the soil and plant faster, so
-  low humidity means you need to water sooner.
+- **Soil pH** — a soil *chemistry* property (how acidic/alkaline the soil is).
+  Unlike moisture and temperature, pH does **not** strongly drive short-term
+  irrigation *timing*; it mainly affects nutrient availability. It is included
+  because the hardware has a pH probe. In the current (synthetic) data it is
+  given a **small placeholder effect** (more acidic soil → watered slightly
+  sooner); the real relationship will come from real field data.
 
-Temperature and humidity come from a **single DHT11/DHT22 chip**, so adding both
-costs the hardware team almost nothing.
+Temperature comes from the DHT11/DHT22; soil pH needs its **own dedicated
+probe**.
 
-Roughly, the importance order is: **soil_moisture ≫ temperature ≈ air_humidity**.
+Roughly, the importance order is: **soil_moisture ≫ temperature ≫ ph**.
 You can actually *see* this in the trained models' coefficients (Section 6).
 
 ---
@@ -89,9 +92,9 @@ We encode the label as `1` = irrigate, `0` = don't.
 
 ### How to use it
 ```bash
-python src/predict.py 18 34 30        # -> Yes
-python src/predict.py 52 26 75        # -> No
-python src/predict.py 18 34 30 --proba   # -> Yes  (P(irrigate)=0.999)
+python src/predict.py 18 34 6.5        # -> Yes
+python src/predict.py 52 26 7.0        # -> No
+python src/predict.py 18 34 6.5 --proba   # -> Yes  (P(irrigate)=0.999)
 ```
 
 ### The optional safety rule
@@ -100,7 +103,7 @@ rule you can switch on with `--safety`: *never irrigate if the soil is already
 wet* (soil_moisture ≥ 60%), no matter what the model says. This protects the
 crop and pump from over-watering if the model ever misbehaves:
 ```bash
-python src/predict.py 80 40 20 --safety   # -> No (soil already wet)
+python src/predict.py 80 40 6.5 --safety   # -> No (soil already wet)
 ```
 
 ---
@@ -136,9 +139,9 @@ outputs are numbers, and it saves a separate `regressor.joblib`.
 
 ### How to use it
 ```bash
-python src/estimate.py 18 34 30
-# water_liters_per_m2: 6.67
-# sunlight_hours     : 6.70
+python src/estimate.py 18 34 6.5
+# water_liters_per_m2: 5.99
+# sunlight_hours     : 6.33
 ```
 
 ---
@@ -150,21 +153,21 @@ is the single combined entry point: give it the three values once, and it runs
 Model 1 and Model 2 together.
 
 ```bash
-python src/recommend.py 18 34 30
+python src/recommend.py 18 34 6.5
 ```
 ```
 === Irrigation recommendation ===
   Irrigate?          : Yes  (P=0.999)
-  Water to apply     : 6.67 L/m^2
-  Sunlight (advisory): 6.70 h
+  Water to apply     : 5.99 L/m^2
+  Sunlight (advisory): 6.33 h
 ```
 
 In the live system, the hardware host calls **one function**:
 ```python
 from recommend import recommend
-r = recommend(soil_moisture=18, temperature=34, air_humidity=30)
+r = recommend(soil_moisture=18, temperature=34, ph=6.5)
 # {"irrigate": "Yes", "irrigate_probability": 0.999,
-#  "water_liters_per_m2": 6.67, "sunlight_hours": 6.70}
+#  "water_liters_per_m2": 5.99, "sunlight_hours": 6.33}
 ```
 
 `recommend.py` is a thin wrapper: it just calls `predict()` and `estimate()` and
@@ -202,22 +205,24 @@ and the **sign** shows the direction. For example, in the irrigate model:
 
 | Feature | Coefficient | Meaning |
 |---------|-------------|---------|
-| soil_moisture | large **negative** | wetter soil pushes toward **No** (sensible) |
-| temperature   | positive | hotter pushes toward **Yes** (sensible) |
-| air_humidity  | negative | drier air pushes toward **Yes** (sensible) |
+| soil_moisture | large **negative** (≈ −4.4) | wetter soil pushes toward **No** (sensible) |
+| temperature   | positive (≈ +1.7) | hotter pushes toward **Yes** (sensible) |
+| ph            | small **negative** (≈ −0.6) | minor effect — pH isn't a strong driver of timing |
 
 The fact that `soil_moisture` has the biggest coefficient confirms it is the
-most important feature — which matches the physics. **This is what makes the
-model explainable**, which matters for the viva.
+most important feature, and `ph` has a small one — which matches the physics
+(pH is a chemistry property, not a strong driver of *when* to water). **This is
+what makes the model explainable**, which matters for the viva.
 
 ---
 
 ## 7. About the data (important!)
 
 There is **no real labelled field data yet**, so both datasets are **synthetic**
-(computer-generated) but **physically reasonable** — dry soil + hot + dry air
-leads to "irrigate" and to higher water amounts. They are generated with a
-**fixed random seed**, so everyone gets identical data and results.
+(computer-generated) but **physically reasonable** — dry soil + high temperature
+leads to "irrigate" and to higher water amounts (with soil pH given a small
+placeholder effect). They are generated with a **fixed random seed**, so everyone
+gets identical data and results.
 
 - `data/irrigation.csv` ← made by `src/generate_data.py`
 - `data/water_sunlight.csv` ← made by `src/generate_water_sunlight_data.py`
@@ -227,7 +232,7 @@ leads to "irrigate" and to higher water amounts. They are generated with a
 changes.
 
 > **Worth saying in the viva:** in the synthetic run, the water model fits well
-> (R² ≈ 0.88) but the sunlight model fits poorly (R² ≈ 0.48). This is *expected,
+> (R² ≈ 0.90) but the sunlight model fits poorly (R² ≈ 0.40). This is *expected,
 > not a bug* — how much sunlight a plant "needs" is mostly a property of the crop,
 > not something these three sensors can reveal. It shows the model can only learn
 > relationships that genuinely exist in the data.
@@ -274,15 +279,15 @@ pip install -r requirements.txt
 # 2. Model 1 — irrigate decision (classification)
 python src/generate_data.py     # (re)create the synthetic dataset
 python src/train.py             # train, evaluate, save model + scaler + plot
-python src/predict.py 18 34 30  # -> Yes
+python src/predict.py 18 34 6.5  # -> Yes
 
 # 3. Model 2 — water/sunlight estimate (regression)
 python src/generate_water_sunlight_data.py  # (re)create its synthetic dataset
 python src/train_regression.py              # train, evaluate, save regressor
-python src/estimate.py 18 34 30             # -> water + sunlight
+python src/estimate.py 18 34 6.5            # -> water + sunlight
 
 # 4. Both models at once
-python src/recommend.py 18 34 30
+python src/recommend.py 18 34 6.5
 ```
 
 **Notes**

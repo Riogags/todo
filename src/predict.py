@@ -7,13 +7,13 @@ three sensors and either:
   (a) imports the helper directly:
 
           from predict import predict
-          decision = predict(soil_moisture=18, temperature=34, air_humidity=30)
+          decision = predict(soil_moisture=18, temperature=34, ph=6.5)
           # decision == "Yes"  -> turn pump on
           # decision == "No"   -> leave pump off
 
   (b) calls this file as a command line tool (e.g. over a serial/host bridge):
 
-          python src/predict.py 18 34 30
+          python src/predict.py 18 34 6.5
           # prints: Yes
 
 The model + scaler are loaded once (lazily, then cached) so repeated calls in a
@@ -58,7 +58,7 @@ def _load():
 def predict(
     soil_moisture: float,
     temperature: float,
-    air_humidity: float,
+    ph: float,
     use_safety_rule: bool = False,
 ) -> str:
     """Decide whether to irrigate from three live sensor readings.
@@ -67,7 +67,7 @@ def predict(
     ----------
     soil_moisture : float   soil moisture in %  (most important feature)
     temperature   : float   air temperature in °C
-    air_humidity  : float   relative air humidity in %
+    ph            : float   soil pH (unitless, ~0-14 scale)
     use_safety_rule : bool  if True, never return "Yes" when the soil is already
                             at/above SAFETY_MOISTURE_CEILING, regardless of the
                             model. This is the optional hard safety override.
@@ -86,20 +86,20 @@ def predict(
 
     model, scaler = _load()
 
-    X = features_to_array(soil_moisture, temperature, air_humidity)
+    X = features_to_array(soil_moisture, temperature, ph)
     X_scaled = scaler.transform(X)
     prediction = model.predict(X_scaled)[0]
     return decode_label(prediction)
 
 
-def predict_proba(soil_moisture: float, temperature: float, air_humidity: float) -> float:
+def predict_proba(soil_moisture: float, temperature: float, ph: float) -> float:
     """Return the model's probability that irrigation is needed (class 1).
 
     Handy for the report/viva and for hardware that wants a confidence value
     rather than a hard Yes/No.
     """
     model, scaler = _load()
-    X = features_to_array(soil_moisture, temperature, air_humidity)
+    X = features_to_array(soil_moisture, temperature, ph)
     X_scaled = scaler.transform(X)
     return float(model.predict_proba(X_scaled)[0][1])
 
@@ -110,7 +110,7 @@ def _parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument("soil_moisture", type=float, help="soil moisture (%%)")
     parser.add_argument("temperature", type=float, help="temperature (°C)")
-    parser.add_argument("air_humidity", type=float, help="air humidity (%%)")
+    parser.add_argument("ph", type=float, help="soil pH (0-14)")
     parser.add_argument(
         "--safety",
         action="store_true",
@@ -130,11 +130,11 @@ def main(argv=None) -> None:
     decision = predict(
         args.soil_moisture,
         args.temperature,
-        args.air_humidity,
+        args.ph,
         use_safety_rule=args.safety,
     )
     if args.proba:
-        p = predict_proba(args.soil_moisture, args.temperature, args.air_humidity)
+        p = predict_proba(args.soil_moisture, args.temperature, args.ph)
         print(f"{decision}  (P(irrigate)={p:.3f})")
     else:
         print(decision)

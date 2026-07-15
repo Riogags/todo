@@ -10,7 +10,7 @@ and returns everything together.
 Use it directly:
 
     from recommend import recommend
-    r = recommend(soil_moisture=18, temperature=34, air_humidity=30)
+    r = recommend(soil_moisture=18, temperature=34, ph=6.5)
     # r == {
     #   "irrigate": "Yes",
     #   "irrigate_probability": 0.999,
@@ -37,7 +37,7 @@ from predict import predict, predict_proba
 def recommend(
     soil_moisture: float,
     temperature: float,
-    air_humidity: float,
+    ph: float,
     use_safety_rule: bool = False,
 ) -> dict:
     """Run both models on one set of readings and return a combined result.
@@ -54,10 +54,10 @@ def recommend(
         }
     """
     decision = predict(
-        soil_moisture, temperature, air_humidity, use_safety_rule=use_safety_rule
+        soil_moisture, temperature, ph, use_safety_rule=use_safety_rule
     )
-    probability = predict_proba(soil_moisture, temperature, air_humidity)
-    amounts = estimate(soil_moisture, temperature, air_humidity)
+    probability = predict_proba(soil_moisture, temperature, ph)
+    amounts = estimate(soil_moisture, temperature, ph)
 
     return {
         "irrigate": decision,
@@ -74,7 +74,7 @@ def _parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument("soil_moisture", type=float, help="soil moisture (%%)")
     parser.add_argument("temperature", type=float, help="temperature (°C)")
-    parser.add_argument("air_humidity", type=float, help="air humidity (%%)")
+    parser.add_argument("ph", type=float, help="soil pH (0-14)")
     parser.add_argument(
         "--safety",
         action="store_true",
@@ -88,7 +88,7 @@ def main(argv=None) -> None:
     r = recommend(
         args.soil_moisture,
         args.temperature,
-        args.air_humidity,
+        args.ph,
         use_safety_rule=args.safety,
     )
     print("=== Irrigation recommendation ===")

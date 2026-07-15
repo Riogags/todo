@@ -132,7 +132,8 @@ def main() -> None:
     #    Sign tells direction:
     #      negative on soil_moisture -> wetter soil pushes toward "No"  (sensible)
     #      positive on temperature   -> hotter pushes toward "Yes"      (sensible)
-    #      negative on air_humidity  -> drier air pushes toward "Yes"   (sensible)
+    #      pH -> small coefficient expected (chemistry, not a strong driver of
+    #            short-term irrigation timing; see generate_data.py)
     # ----------------------------------------------------------------------
     print("=== Model explanation (standardised coefficients) ===")
     for feature, coef in zip(FEATURES, model.coef_[0]):

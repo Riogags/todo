@@ -29,7 +29,9 @@ RANDOM_STATE = 42
 # Feature definition — the contract between this code and the hardware sensors
 # ---------------------------------------------------------------------------
 # Order matters. Do not reorder without retraining.
-FEATURES = ["soil_moisture", "temperature", "air_humidity"]
+# NOTE: the third feature is soil pH (from a dedicated pH probe). Temperature
+# comes from the DHT11/DHT22; soil_moisture from the moisture probe.
+FEATURES = ["soil_moisture", "temperature", "ph"]
 TARGET = "irrigate"
 
 # Human-readable mapping for the binary target.
@@ -110,14 +112,14 @@ def load_data(path: str = DATA_PATH) -> pd.DataFrame:
     return df
 
 
-def features_to_array(soil_moisture: float, temperature: float, air_humidity: float) -> np.ndarray:
+def features_to_array(soil_moisture: float, temperature: float, ph: float) -> np.ndarray:
     """Pack three raw sensor readings into the 2-D array sklearn expects.
 
     Returned shape is (1, 3) with columns in FEATURES order, ready to be passed
     straight to scaler.transform(). Centralising this guarantees inference uses
     the same column order the model was trained on.
     """
-    return np.array([[soil_moisture, temperature, air_humidity]], dtype=float)
+    return np.array([[soil_moisture, temperature, ph]], dtype=float)
 
 
 def decode_label(value: int) -> str:

@@ -5,12 +5,12 @@ Mirrors predict.py, but instead of a Yes/No decision it returns the two
 estimated amounts. Use it directly:
 
     from estimate import estimate
-    amounts = estimate(soil_moisture=18, temperature=34, air_humidity=30)
+    amounts = estimate(soil_moisture=18, temperature=34, ph=6.5)
     # amounts == {"water_liters_per_m2": 5.1, "sunlight_hours": 6.4}
 
 …or from the command line:
 
-    python src/estimate.py 18 34 30
+    python src/estimate.py 18 34 6.5
     # water_liters_per_m2: 5.10
     # sunlight_hours     : 6.40
 """
@@ -49,7 +49,7 @@ def _load():
     return _model, _scaler
 
 
-def estimate(soil_moisture: float, temperature: float, air_humidity: float) -> dict:
+def estimate(soil_moisture: float, temperature: float, ph: float) -> dict:
     """Estimate required water and sunlight from three live sensor readings.
 
     Returns a dict keyed by REGRESSION_TARGETS:
@@ -61,7 +61,7 @@ def estimate(soil_moisture: float, temperature: float, air_humidity: float) -> d
     """
     model, scaler = _load()
 
-    X = features_to_array(soil_moisture, temperature, air_humidity)
+    X = features_to_array(soil_moisture, temperature, ph)
     X_scaled = scaler.transform(X)
     preds = model.predict(X_scaled)[0]
 
@@ -78,13 +78,13 @@ def _parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument("soil_moisture", type=float, help="soil moisture (%%)")
     parser.add_argument("temperature", type=float, help="temperature (°C)")
-    parser.add_argument("air_humidity", type=float, help="air humidity (%%)")
+    parser.add_argument("ph", type=float, help="soil pH (0-14)")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> None:
     args = _parse_args(argv)
-    amounts = estimate(args.soil_moisture, args.temperature, args.air_humidity)
+    amounts = estimate(args.soil_moisture, args.temperature, args.ph)
     print(f"water_liters_per_m2: {amounts['water_liters_per_m2']:.2f}")
     print(f"sunlight_hours     : {amounts['sunlight_hours']:.2f}")
 
